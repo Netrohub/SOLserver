@@ -56,6 +56,13 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path} from ${req.get('origin') || 'unknown'}`);
+  next();
+});
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
@@ -90,46 +97,66 @@ prisma.$connect()
   });
 
 // Discord OAuth2
-passport.use(
-  new DiscordStrategy(
-    {
-      clientID: process.env.DISCORD_CLIENT_ID!,
-      clientSecret: process.env.DISCORD_CLIENT_SECRET!,
-      callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:3001/auth/discord/callback',
-      scope: ['identify', 'guilds'],
-    },
-    (accessToken: string, refreshToken: string, profile: any, done: any) => {
-      return done(null, profile);
-    }
-  )
-);
+try {
+  passport.use(
+    new DiscordStrategy(
+      {
+        clientID: process.env.DISCORD_CLIENT_ID!,
+        clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+        callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:3001/auth/discord/callback',
+        scope: ['identify', 'guilds'],
+      },
+      (accessToken: string, refreshToken: string, profile: any, done: any) => {
+        console.log('✅ Discord OAuth callback - User authenticated:', profile.username);
+        return done(null, profile);
+      }
+    )
+  );
 
-passport.serializeUser((user: any, done) => {
-  done(null, user);
-});
+  passport.serializeUser((user: any, done) => {
+    done(null, user);
+  });
 
-passport.deserializeUser((obj: any, done) => {
-  done(null, obj);
-});
+  passport.deserializeUser((obj: any, done) => {
+    done(null, obj);
+  });
+  
+  console.log('✅ Discord OAuth strategy initialized');
+} catch (error) {
+  console.error('❌ Failed to initialize Discord OAuth:', error);
+  process.exit(1);
+}
 
 // Auth routes
-app.get('/auth/discord', passport.authenticate('discord'));
+app.get('/auth/discord', (req, res, next) => {
+  console.log('🔐 Starting Discord OAuth flow');
+  passport.authenticate('discord')(req, res, next);
+});
 
 app.get(
   '/auth/discord/callback',
-  passport.authenticate('discord', { failureRedirect: '/' }),
+  (req, res, next) => {
+    console.log('🔄 Discord callback received');
+    passport.authenticate('discord', { 
+      failureRedirect: '/',
+      failureMessage: true 
+    })(req, res, next);
+  },
   (req, res) => {
+    console.log('✅ OAuth successful, redirecting to dashboard');
     res.redirect(process.env.DASHBOARD_URL || 'http://localhost:5173/dashboard');
   }
 );
 
 app.get('/auth/logout', (req, res) => {
+  console.log('👋 User logging out');
   req.logout(() => {
     res.redirect(process.env.DASHBOARD_URL || 'http://localhost:5173');
   });
 });
 
 app.get('/auth/user', (req, res) => {
+  console.log('👤 User info requested');
   res.json(req.user || null);
 });
 
@@ -312,6 +339,22 @@ io.on('connection', (socket) => {
 
 // Export io for use in other parts of the app
 export { io };
+
+// Global error handlers to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Promise Rejection:', reason);
+  console.error('Promise:', promise);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+});
+
+// Express error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('❌ Express Error:', err);
+  res.status(500).json({ error: 'Internal server error', message: err.message });
+});
 
 // Start server
 const PORT = parseInt(process.env.PORT || process.env.DASHBOARD_API_PORT || '3001', 10);
