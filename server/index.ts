@@ -78,6 +78,17 @@ const prisma = new PrismaClient({
   datasourceUrl: process.env.DATABASE_URL,
 });
 
+// Test database connection on startup
+prisma.$connect()
+  .then(() => {
+    console.log('✅ Database connection successful');
+  })
+  .catch((error) => {
+    console.error('❌ Database connection failed:', error);
+    console.error('DATABASE_URL format should be: mysql://username:password@host:port/database');
+    process.exit(1);
+  });
+
 // Discord OAuth2
 passport.use(
   new DiscordStrategy(
