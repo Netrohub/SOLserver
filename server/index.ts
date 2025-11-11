@@ -160,13 +160,29 @@ app.get('/auth/user', (req, res) => {
   res.json(req.user || null);
 });
 
-// Health check endpoint
+// Health check endpoint - must respond quickly for Railway
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+  // Simple fast response for Railway health check
+  res.status(200).send('OK');
+});
+
+// Detailed health endpoint
+app.get('/health/detailed', async (req, res) => {
+  try {
+    // Test database
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ 
+      status: 'healthy', 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: 'Database connection failed'
+    });
+  }
 });
 
 // Middleware to check authentication
