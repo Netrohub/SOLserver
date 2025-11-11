@@ -9,6 +9,17 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: '../.env' });
 
+// Validate required environment variables
+const requiredEnvVars = ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DATABASE_URL'];
+const missingVars = requiredEnvVars.filter((key) => !process.env[key]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:');
+  missingVars.forEach((key) => console.error(`   - ${key}`));
+  console.error('\n💡 Add these to Railway or your .env file');
+  process.exit(1);
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -31,6 +42,9 @@ app.use(
     saveUninitialized: false,
     cookie: {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     },
   })
 );
@@ -79,7 +93,7 @@ app.get(
 
 app.get('/auth/logout', (req, res) => {
   req.logout(() => {
-    res.redirect('/');
+    res.redirect(process.env.DASHBOARD_URL || 'http://localhost:5173');
   });
 });
 
@@ -87,10 +101,28 @@ app.get('/auth/user', (req, res) => {
   res.json(req.user || null);
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Middleware to check authentication
 const requireAuth = (req: any, res: any, next: any) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
+// Middleware to validate Snowflake IDs (Discord IDs)
+const validateSnowflake = (paramName: string) => (req: any, res: any, next: any) => {
+  const id = req.params[paramName];
+  if (!id || !/^\d{17,19}$/.test(id)) {
+    return res.status(400).json({ error: `Invalid ${paramName}` });
   }
   next();
 };
@@ -105,7 +137,7 @@ app.get('/api/guilds', requireAuth, async (req: any, res) => {
   }
 });
 
-app.get('/api/guild/:guildId/stats', requireAuth, async (req, res) => {
+app.get('/api/guild/:guildId/stats', requireAuth, validateSnowflake('guildId'), async (req, res) => {
   try {
     const { guildId } = req.params;
 
@@ -129,11 +161,12 @@ app.get('/api/guild/:guildId/stats', requireAuth, async (req, res) => {
       totalPoints: totalPoints._sum.points || 0,
     });
   } catch (error) {
+    console.error('Error fetching stats:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
 
-app.get('/api/guild/:guildId/leaderboard', requireAuth, async (req, res) => {
+app.get('/api/guild/:guildId/leaderboard', requireAuth, validateSnowflake('guildId'), async (req, res) => {
   try {
     const { guildId } = req.params;
     const { metric = 'points', limit = 10 } = req.query;
@@ -172,7 +205,7 @@ app.get('/api/guild/:guildId/leaderboard', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/guild/:guildId/activity', requireAuth, async (req, res) => {
+app.get('/api/guild/:guildId/activity', requireAuth, validateSnowflake('guildId'), async (req, res) => {
   try {
     const { guildId } = req.params;
     const { days = 7 } = req.query;
@@ -199,7 +232,7 @@ app.get('/api/guild/:guildId/activity', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/guild/:guildId/user/:userId', requireAuth, async (req, res) => {
+app.get('/api/guild/:guildId/user/:userId', requireAuth, validateSnowflake('guildId'), validateSnowflake('userId'), async (req, res) => {
   try {
     const { guildId, userId } = req.params;
 
@@ -249,10 +282,11 @@ io.on('connection', (socket) => {
 export { io };
 
 // Start server
-const PORT = parseInt(process.env.DASHBOARD_API_PORT || '3001', 10);
-server.listen(PORT, () => {
-  console.log(`Dashboard API server running on port ${PORT}`);
-  console.log(`WebSocket server ready`);
+const PORT = parseInt(process.env.PORT || process.env.DASHBOARD_API_PORT || '3001', 10);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Dashboard API server running on port ${PORT}`);
+  console.log(`✅ WebSocket server ready`);
+  console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 export default app;
