@@ -24,12 +24,12 @@ const app = express();
 const server = http.createServer(app);
 
 // CORS configuration - allow both production and development
-const allowedOrigins = [
-  process.env.DASHBOARD_URL,
+const allowedOrigins: string[] = [
+  process.env.DASHBOARD_URL || '',
   'http://localhost:5173',
   'http://localhost:3000',
   'https://solclient.pages.dev',
-].filter(Boolean); // Remove undefined values
+].filter((origin): origin is string => Boolean(origin) && origin !== ''); // Remove empty strings
 
 console.log('✅ Allowed CORS origins:', allowedOrigins);
 
