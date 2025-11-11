@@ -22,16 +22,37 @@ if (missingVars.length > 0) {
 
 const app = express();
 const server = http.createServer(app);
+
+// CORS configuration - allow both production and development
+const allowedOrigins = [
+  process.env.DASHBOARD_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://solclient.pages.dev',
+].filter(Boolean); // Remove undefined values
+
+console.log('✅ Allowed CORS origins:', allowedOrigins);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.DASHBOARD_URL || 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   },
 });
 
 // Middleware
 app.use(cors({
-  origin: process.env.DASHBOARD_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('⚠️  CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -284,9 +305,15 @@ export { io };
 // Start server
 const PORT = parseInt(process.env.PORT || process.env.DASHBOARD_API_PORT || '3001', 10);
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Dashboard API server running on port ${PORT}`);
-  console.log(`✅ WebSocket server ready`);
+  console.log('\n🚀 ================================================');
+  console.log('✅ Dashboard API server running');
+  console.log(`✅ Port: ${PORT}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Dashboard URL: ${process.env.DASHBOARD_URL || 'http://localhost:5173'}`);
+  console.log(`✅ Callback URL: ${process.env.DISCORD_CALLBACK_URL || 'Not set'}`);
+  console.log(`✅ Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
+  console.log(`✅ WebSocket server ready`);
+  console.log('🚀 ================================================\n');
 });
 
 export default app;
