@@ -1,0 +1,417 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String            @id
+  username        String
+  discriminator   String?
+  firstSeen       DateTime          @default(now())
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  members         Member[]
+  messageStats    MessageStat[]
+  presenceSnapshots PresenceSnapshot[]
+  points          Points[]
+  auditActions    Audit[]           @relation("AuditActor")
+  auditTargets    Audit[]           @relation("AuditTarget")
+
+  @@map("users")
+}
+
+model Member {
+  guildId         String
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinDate        DateTime          @default(now())
+  leaveDate       DateTime?
+  isActive        Boolean           @default(true)
+  roles           Json              @default("[]")
+  nickname        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@id([guildId, userId])
+  @@index([guildId])
+  @@index([userId])
+  @@index([guildId, isActive])
+  @@map("members")
+}
+
+model MessageStat {
+  id              String            @id @default(cuid())
+  guildId         String
+  channelId       String
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timestamp       DateTime          @default(now())
+  messageLength   Int               @default(0)
+  hasAttachments  Boolean           @default(false)
+  attachmentsCount Int              @default(0)
+  isImage         Boolean           @default(false)
+
+  @@index([guildId, timestamp])
+  @@index([userId, timestamp])
+  @@index([channelId, timestamp])
+  @@index([guildId, userId, timestamp])
+  @@map("message_stats")
+}
+
+model PresenceSnapshot {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          String            // online, idle, dnd, offline
+  timestamp       DateTime          @default(now())
+
+  @@index([guildId, userId, timestamp])
+  @@index([userId, timestamp])
+  @@map("presence_snapshots")
+}
+
+model DailyAggregate {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  date            DateTime          @db.Date
+  messages        Int               @default(0)
+  images          Int               @default(0)
+  attachments     Int               @default(0)
+  minutesOnline   Int               @default(0)
+  minutesIdle     Int               @default(0)
+  minutesDnd      Int               @default(0)
+  minutesOffline  Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([guildId, userId, date])
+  @@index([guildId, date])
+  @@index([userId, date])
+  @@map("daily_aggregates")
+}
+
+model HourlyAggregate {
+  id              String            @id @default(cuid())
+  guildId         String
+  channelId       String?
+  hourBucket      DateTime          @db.DateTime(3)
+  messages        Int               @default(0)
+  images          Int               @default(0)
+  attachments     Int               @default(0)
+  uniqueUsers     Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([guildId, channelId, hourBucket])
+  @@index([guildId, hourBucket])
+  @@map("hourly_aggregates")
+}
+
+model Points {
+  guildId         String
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  points          Int               @default(0)
+  level           Int               @default(1)
+  lastAwardedAt   DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@id([guildId, userId])
+  @@index([guildId, points])
+  @@index([guildId, level])
+  @@map("points")
+}
+
+model Config {
+  guildId         String            @id
+  settings        Json              @default("{}")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@map("configs")
+}
+
+model Audit {
+  id              String            @id @default(cuid())
+  guildId         String
+  action          String
+  actorId         String?
+  actor           User?             @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  targetId        String?
+  target          User?             @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  metadata        Json?
+  traceId         String?
+  timestamp       DateTime          @default(now())
+
+  @@index([guildId, timestamp])
+  @@index([actorId])
+  @@index([traceId])
+  @@map("audits")
+}
+
+model OptOut {
+  guildId         String
+  userId          String
+  reason          String?
+  createdAt       DateTime          @default(now())
+
+  @@id([guildId, userId])
+  @@map("opt_outs")
+}
+
+model Achievement {
+  id              String            @id @default(cuid())
+  code            String            @unique
+  name            String
+  description     String
+  icon            String
+  category        String            // social, activity, milestone, special
+  requirement     Int               // Threshold value
+  points          Int               @default(0)
+  createdAt       DateTime          @default(now())
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  achievementId   String
+  achievement     Achievement       @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  progress        Int               @default(0)
+  completed       Boolean           @default(false)
+  completedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([guildId, userId, achievementId])
+  @@index([guildId, userId])
+  @@index([achievementId])
+  @@map("user_achievements")
+}
+
+model Inventory {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  itemId          String
+  quantity        Int               @default(1)
+  purchasedAt     DateTime          @default(now())
+  metadata        Json?
+
+  @@unique([guildId, userId, itemId])
+  @@index([guildId, userId])
+  @@map("inventory")
+}
+
+model ShopItem {
+  id              String            @id @default(cuid())
+  guildId         String
+  code            String
+  name            String
+  description     String
+  price           Int
+  category        String            // background, role, boost, badge
+  stock           Int               @default(-1) // -1 = unlimited
+  metadata        Json?
+  enabled         Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([guildId, code])
+  @@index([guildId, enabled])
+  @@map("shop_items")
+}
+
+model DailyReward {
+  guildId         String
+  userId          String
+  lastClaimed     DateTime
+  streak          Int               @default(1)
+  longestStreak   Int               @default(1)
+  totalClaimed    Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@id([guildId, userId])
+  @@index([guildId, streak])
+  @@map("daily_rewards")
+}
+
+model CustomCommand {
+  id              String            @id @default(cuid())
+  guildId         String
+  name            String
+  response        String            @db.Text
+  creatorId       String
+  uses            Int               @default(0)
+  enabled         Boolean           @default(true)
+  requiresRole    String?
+  cooldown        Int               @default(0) // seconds
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([guildId, name])
+  @@index([guildId, enabled])
+  @@map("custom_commands")
+}
+
+model Poll {
+  id              String            @id @default(cuid())
+  guildId         String
+  channelId       String
+  messageId       String?
+  creatorId       String
+  question        String
+  options         Json              // Array of option strings
+  votes           Json              @default("{}") // Map of userId -> optionIndex
+  multipleChoice  Boolean           @default(false)
+  anonymous       Boolean           @default(false)
+  endsAt          DateTime?
+  closed          Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([guildId, creatorId])
+  @@index([closed])
+  @@map("polls")
+}
+
+model VoiceSession {
+  id              String            @id @default(cuid())
+  guildId         String
+  channelId       String
+  userId          String
+  joinedAt        DateTime          @default(now())
+  leftAt          DateTime?
+  duration        Int?              // minutes
+  muted           Boolean           @default(false)
+  deafened        Boolean           @default(false)
+
+  @@index([guildId, userId])
+  @@index([guildId, channelId])
+  @@map("voice_sessions")
+}
+
+model Warning {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  moderatorId     String
+  reason          String
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  expiresAt       DateTime?
+
+  @@index([guildId, userId, active])
+  @@index([guildId, moderatorId])
+  @@map("warnings")
+}
+
+model Mute {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  moderatorId     String
+  reason          String
+  expiresAt       DateTime
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+
+  @@index([guildId, userId, active])
+  @@index([expiresAt, active])
+  @@map("mutes")
+}
+
+model Friendship {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId1         String
+  userId2         String
+  status          String            // pending, accepted, blocked
+  createdAt       DateTime          @default(now())
+  acceptedAt      DateTime?
+
+  @@unique([guildId, userId1, userId2])
+  @@index([guildId, userId1])
+  @@index([guildId, userId2])
+  @@map("friendships")
+}
+
+model Notification {
+  id              String            @id @default(cuid())
+  guildId         String
+  userId          String
+  type            String            // level_up, achievement, mention, friend_request
+  title           String
+  message         String
+  read            Boolean           @default(false)
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+
+  @@index([guildId, userId, read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Event {
+  id              String            @id @default(cuid())
+  guildId         String
+  channelId       String
+  creatorId       String
+  title           String
+  description     String            @db.Text
+  startTime       DateTime
+  endTime         DateTime?
+  location        String?
+  maxAttendees    Int?
+  imageUrl        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  rsvps           EventRSVP[]
+
+  @@index([guildId, startTime])
+  @@index([creatorId])
+  @@map("events")
+}
+
+model EventRSVP {
+  id              String            @id @default(cuid())
+  eventId         String
+  event           Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId          String
+  status          String            // going, maybe, not_going
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("event_rsvps")
+}
+
+model Integration {
+  id              String            @id @default(cuid())
+  guildId         String
+  type            String            // twitch, youtube, twitter, github, rss
+  channelId       String
+  config          Json              // Platform-specific configuration
+  enabled         Boolean           @default(true)
+  lastSync        DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([guildId, type, channelId])
+  @@index([guildId, enabled])
+  @@map("integrations")
+}
+
