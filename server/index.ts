@@ -14,7 +14,14 @@ import { createClient } from 'redis';
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DATABASE_URL', 'SESSION_SECRET'];
+const requiredEnvVars = [
+  'DISCORD_CLIENT_ID',
+  'DISCORD_CLIENT_SECRET',
+  'DATABASE_URL',
+  'SESSION_SECRET',
+  'DASHBOARD_URL',
+  'DISCORD_CALLBACK_URL',
+];
 const missingVars = requiredEnvVars.filter((key) => !process.env[key]);
 
 if (missingVars.length > 0) {
@@ -171,7 +178,7 @@ try {
       {
         clientID: process.env.DISCORD_CLIENT_ID!,
         clientSecret: process.env.DISCORD_CLIENT_SECRET!,
-        callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:3001/auth/discord/callback',
+        callbackURL: process.env.DISCORD_CALLBACK_URL!,
         scope: ['identify', 'guilds'],
       },
       (accessToken: string, refreshToken: string, profile: any, done: any) => {
@@ -212,7 +219,7 @@ app.get(
   },
   (req, res) => {
     console.log('✅ OAuth successful, redirecting to dashboard');
-    res.redirect(process.env.DASHBOARD_URL || 'http://localhost:5173/dashboard');
+    res.redirect(process.env.DASHBOARD_URL!);
   }
 );
 
