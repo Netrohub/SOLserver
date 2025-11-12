@@ -139,7 +139,14 @@ const csrfProtection = csrf({
   },
 }) as unknown as RequestHandler;
 
-app.use(csrfProtection);
+const csrfExemptPaths = new Set(['/health', '/health/detailed', '/metrics']);
+
+app.use((req, res, next) => {
+  if (csrfExemptPaths.has(req.path)) {
+    return next();
+  }
+  return csrfProtection(req, res, next);
+});
 
 // Import Prisma from parent project
 import { PrismaClient } from '@prisma/client';
