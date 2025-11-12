@@ -47,5 +47,12 @@ if (isProduction) {
   installArgs.push('--omit=dev');
 }
 
+const clientPackageJson = path.join(clientPath, 'package.json');
+
+if (!fs.existsSync(clientPackageJson)) {
+  console.warn(`⚠️ Client package.json not found at ${clientPackageJson}. Skipping client dependency install.`);
+  process.exit(0);
+}
+
 run(npmCmd, installArgs);
 
