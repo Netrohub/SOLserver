@@ -137,7 +137,7 @@ const csrfProtection = csrf({
     secure: isProduction,
     sameSite: isProduction ? 'none' : 'lax',
   },
-}) as RequestHandler;
+}) as unknown as RequestHandler;
 
 app.use(csrfProtection);
 
