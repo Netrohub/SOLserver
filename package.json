@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch server/index.ts",
-    "dev:client": "cd client && npm run dev",
+    "dev:client": "npm run dev --prefix ./client",
     "build": "npm run build:server && npm run build:client",
     "build:server": "prisma generate && tsc -p server/tsconfig.json",
-    "build:client": "cd client && npm run build",
+    "build:client": "npm run build --prefix ./client",
     "start": "node dist/server/index.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && npm install --prefix ./client --include=dev"
   },
   "dependencies": {
     "@prisma/client": "^5.7.1",
