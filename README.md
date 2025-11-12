@@ -85,6 +85,12 @@ Output: `dist/server/` folder
 - `GET /api/guild/:guildId/leaderboard?metric=points&limit=10` - Leaderboard
 - `GET /api/guild/:guildId/activity?days=7` - Activity data
 - `GET /api/guild/:guildId/user/:userId` - User profile
+- `GET /api/guild/:guildId/dashboard/metrics` - Aggregated reinforcement & alert metrics
+- `GET /api/guild/:guildId/reinforcements` - Active reinforcement queue (derived from warnings)
+- `GET /api/guild/:guildId/alerts` - Recent alert notifications
+- `GET /api/guild/:guildId/activity-feed` - Latest audit trail entries
+- `GET /api/guild/:guildId/moderators` - Moderator workload snapshot
+- `GET /api/guild/:guildId/analytics` - Trend data for charts (reinforcement flow, sentiment, workload)
 
 ### WebSocket Events
 - `subscribe:guild` - Subscribe to guild updates
