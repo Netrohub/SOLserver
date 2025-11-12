@@ -23,7 +23,8 @@ railway init
 # - DATABASE_URL
 # - DISCORD_CLIENT_ID
 # - DISCORD_CLIENT_SECRET
-# - SESSION_SECRET
+# - SESSION_SECRET (use a long, random value)
+# - REDIS_URL (for session storage, e.g. redis://default:password@host:port)
 # - DASHBOARD_URL (will update after frontend deployment)
 # - DISCORD_CALLBACK_URL (will update after backend deployment)
 

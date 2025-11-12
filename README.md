@@ -46,6 +46,11 @@ DASHBOARD_API_PORT=3001
 
 # Security
 SESSION_SECRET=your_random_32_character_secret
+
+# Session store
+REDIS_URL=redis://default:password@localhost:6379
+# Optional comma-separated extra origins allowed by CORS
+ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 ## 🚀 Development
@@ -117,11 +122,15 @@ railway domain
 | `DASHBOARD_URL` | Frontend URL | Yes |
 | `DASHBOARD_API_PORT` | Port to run on | No (default: 3001) |
 | `SESSION_SECRET` | Session encryption key | Yes |
+| `REDIS_URL` | Redis connection string for session store | Yes (production) |
+| `ALLOWED_ORIGINS` | Extra comma-separated origins for CORS | No |
 
 ## 🔒 Security
 
 - Session cookies with httpOnly
+- Redis-backed session storage
 - CORS restricted to dashboard domain
+- CSRF protection via double-submit cookie
 - OAuth2 state parameter validation
 - Secure session secrets
 - HTTPS only in production

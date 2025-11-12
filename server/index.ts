@@ -6,11 +6,15 @@ import { Strategy as DiscordStrategy } from 'passport-discord';
 import { Server } from 'socket.io';
 import http from 'http';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
+import csrf from 'csurf';
+import RedisStore from 'connect-redis';
+import { createClient } from 'redis';
 
-dotenv.config({ path: '../.env' });
+dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DATABASE_URL'];
+const requiredEnvVars = ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DATABASE_URL', 'SESSION_SECRET'];
 const missingVars = requiredEnvVars.filter((key) => !process.env[key]);
 
 if (missingVars.length > 0) {
@@ -22,14 +26,26 @@ if (missingVars.length > 0) {
 
 const app = express();
 const server = http.createServer(app);
+const isProduction = process.env.NODE_ENV === 'production';
+
+app.set('trust proxy', 1);
 
 // CORS configuration - allow both production and development
-const allowedOrigins: string[] = [
-  process.env.DASHBOARD_URL || '',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://solclient.pages.dev',
-].filter((origin): origin is string => Boolean(origin) && origin !== ''); // Remove empty strings
+const additionalOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0);
+
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      process.env.DASHBOARD_URL,
+      'http://localhost:5173',
+      'http://localhost:3000',
+      ...additionalOrigins,
+    ].filter((origin): origin is string => Boolean(origin))
+  )
+);
 
 console.log('✅ Allowed CORS origins:', allowedOrigins);
 
@@ -43,9 +59,8 @@ const io = new Server(server, {
 // Middleware
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -54,8 +69,44 @@ app.use(cors({
     }
   },
   credentials: true,
+  optionsSuccessStatus: 204,
 }));
 app.use(express.json());
+app.use(cookieParser());
+
+const sessionSecret = process.env.SESSION_SECRET as string;
+const redisUrl = process.env.REDIS_URL || process.env.SESSION_REDIS_URL;
+let sessionStore: session.Store | undefined;
+let redisClientInstance: ReturnType<typeof createClient> | null = null;
+
+if (redisUrl) {
+  const redisClient = createClient({ url: redisUrl });
+  redisClientInstance = redisClient;
+
+  redisClient.on('error', (error) => {
+    console.error('❌ Redis session store error:', error);
+  });
+
+  redisClient
+    .connect()
+    .then(() => {
+      console.log('✅ Redis session store connected');
+    })
+    .catch((error) => {
+      console.error('❌ Failed to connect to Redis session store:', error);
+    });
+
+  sessionStore = new RedisStore({
+    client: redisClient,
+    prefix: process.env.SESSION_REDIS_PREFIX || 'dashboard:sess:',
+    disableTouch: false,
+  });
+} else if (isProduction) {
+  console.error('❌ REDIS_URL is required in production for session storage');
+  process.exit(1);
+} else {
+  console.warn('⚠️ REDIS_URL not provided; using in-memory session store (development only)');
+}
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -65,19 +116,30 @@ app.use((req, res, next) => {
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+    store: sessionStore,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
     },
   })
 );
 app.use(passport.initialize());
 app.use(passport.session());
+
+const csrfProtection = csrf({
+  cookie: {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+  },
+});
+
+app.use(csrfProtection);
 
 // Import Prisma from parent project
 import { PrismaClient } from '@prisma/client';
@@ -158,6 +220,10 @@ app.get('/auth/logout', (req, res) => {
 app.get('/auth/user', (req, res) => {
   console.log('👤 User info requested');
   res.json(req.user || null);
+});
+
+app.get('/auth/csrf', (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
 });
 
 // Health check endpoint - must respond quickly for Railway
@@ -366,10 +432,28 @@ process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
 });
 
-// Express error handler
+const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
+signals.forEach((signal) => {
+  process.on(signal, () => {
+    redisClientInstance
+      ?.quit()
+      .then(() => {
+        console.log('✅ Redis session store disconnected');
+      })
+      .catch((error) => {
+        console.error('⚠️ Error closing Redis connection:', error);
+      });
+  });
+});
+
 app.use((err: any, req: any, res: any, next: any) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    console.warn('⚠️ Invalid CSRF token', err);
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
   console.error('❌ Express Error:', err);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  return res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
 // Start server
