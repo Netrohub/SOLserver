@@ -8,7 +8,7 @@
     "dev:client": "npm run dev --prefix ./client",
     "build": "npm run build:server && npm run build:client",
     "build:server": "prisma generate && tsc -p server/tsconfig.json",
-    "build:client": "npm run build --prefix ./client",
+    "build:client": "node scripts/build-client.js",
     "start": "node dist/server/index.js",
     "postinstall": "node scripts/postinstall.js"
   },
