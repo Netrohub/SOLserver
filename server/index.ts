@@ -102,8 +102,7 @@ if (redisUrl) {
     disableTouch: false,
   });
 } else if (isProduction) {
-  console.error('❌ REDIS_URL is required in production for session storage');
-  process.exit(1);
+  console.warn('⚠️ REDIS_URL not provided; falling back to in-memory session store (not recommended for production)');
 } else {
   console.warn('⚠️ REDIS_URL not provided; using in-memory session store (development only)');
 }
