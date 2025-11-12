@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import passport from 'passport';
@@ -137,7 +137,7 @@ const csrfProtection = csrf({
     secure: isProduction,
     sameSite: isProduction ? 'none' : 'lax',
   },
-});
+}) as RequestHandler;
 
 app.use(csrfProtection);
 
